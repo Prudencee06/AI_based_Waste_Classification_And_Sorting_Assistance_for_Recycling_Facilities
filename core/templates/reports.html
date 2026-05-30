@@ -1,0 +1,242 @@
+{% extends 'base.html' %}
+
+{% block title %}Reports - Waste Classification System{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2><i class="fas fa-file-alt"></i> Reports & Analytics</h2>
+        <hr>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-calendar"></i> Date Range Report</h5>
+            </div>
+            <div class="card-body">
+                <form id="dateRangeForm">
+                    <div class="mb-3">
+                        <label class="form-label">Start Date</label>
+                        <input type="date" class="form-control" id="startDate" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">End Date</label>
+                        <input type="date" class="form-control" id="endDate" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-chart-line"></i> Generate Report
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="fas fa-chart-pie"></i> Summary Report</h5>
+            </div>
+            <div class="card-body text-center">
+                <i class="fas fa-chart-pie fa-3x text-success mb-3"></i>
+                <p>Get a summary of all detections, alerts, and performance metrics.</p>
+                <button class="btn btn-success" onclick="generateSummaryReport()">
+                    <i class="fas fa-download"></i> Download Summary
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-exclamation-triangle"></i> Contamination Report</h5>
+            </div>
+            <div class="card-body text-center">
+                <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
+                <p>Focus on contamination events and top contaminants.</p>
+                <button class="btn btn-info" onclick="generateContaminationReport()">
+                    <i class="fas fa-download"></i> Download Contamination Report
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4" id="reportPreview" style="display: none;">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0"><i class="fas fa-chart-bar"></i> Report Preview</h5>
+            </div>
+            <div class="card-body">
+                <div id="reportContent"></div>
+                <div class="mt-3">
+                    <button class="btn btn-success" onclick="downloadReport()">
+                        <i class="fas fa-download"></i> Download as CSV
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentReportData = null;
+    
+    document.getElementById('dateRangeForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const startDate = document.getElementById('startDate').value;
+        const endDate = document.getElementById('endDate').value;
+        
+        await generateDateRangeReport(startDate, endDate);
+    });
+    
+    async function generateDateRangeReport(startDate, endDate) {
+        try {
+            // Fetch detections
+            const response = await fetch('/api/detections/');
+            const detections = await response.json();
+            const events = detections.results || detections;
+            
+            // Filter by date range
+            const filtered = events.filter(e => {
+                const eventDate = new Date(e.timestamp).toISOString().split('T')[0];
+                return eventDate >= startDate && eventDate <= endDate;
+            });
+            
+            currentReportData = filtered;
+            
+            // Generate preview
+            const totalDetections = filtered.length;
+            const totalAlerts = filtered.filter(e => e.alert_triggered).length;
+            const totalCorrected = filtered.filter(e => e.worker_corrected).length;
+            
+            // Material distribution
+            const materials = {};
+            filtered.forEach(e => {
+                materials[e.detected_class] = (materials[e.detected_class] || 0) + 1;
+            });
+            
+            const materialHtml = Object.entries(materials).map(([material, count]) => `
+                <div class="d-flex justify-content-between mb-2">
+                    <span>${material.toUpperCase()}:</span>
+                    <span><strong>${count}</strong> (${((count/totalDetections)*100).toFixed(1)}%)</span>
+                </div>
+            `).join('');
+            
+            const reportHtml = `
+                <h4>Report: ${startDate} to ${endDate}</h4>
+                <hr>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="card bg-primary text-white mb-3">
+                            <div class="card-body text-center">
+                                <h3>${totalDetections}</h3>
+                                <p>Total Detections</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-warning text-dark mb-3">
+                            <div class="card-body text-center">
+                                <h3>${totalAlerts}</h3>
+                                <p>Total Alerts</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-success text-white mb-3">
+                            <div class="card-body text-center">
+                                <h3>${totalCorrected}</h3>
+                                <p>Worker Corrections</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <h5>Material Distribution</h5>
+                ${materialHtml}
+            `;
+            
+            document.getElementById('reportContent').innerHTML = reportHtml;
+            document.getElementById('reportPreview').style.display = 'block';
+            
+        } catch (error) {
+            console.error('Error generating report:', error);
+        }
+    }
+    
+    async function generateSummaryReport() {
+        try {
+            const response = await fetch('/api/detections/');
+            const detections = await response.json();
+            const events = detections.results || detections;
+            
+            let csv = 'Report Type,Value\n';
+            csv += `Total Detections,${events.length}\n`;
+            csv += `Total Alerts,${events.filter(e => e.alert_triggered).length}\n`;
+            csv += `Worker Corrections,${events.filter(e => e.worker_corrected).length}\n`;
+            
+            // Material distribution
+            const materials = {};
+            events.forEach(e => {
+                materials[e.detected_class] = (materials[e.detected_class] || 0) + 1;
+            });
+            
+            csv += '\nMaterial Distribution\n';
+            csv += 'Material,Count,Percentage\n';
+            Object.entries(materials).forEach(([material, count]) => {
+                csv += `${material},${count},${((count/events.length)*100).toFixed(1)}%\n`;
+            });
+            
+            downloadCSV(csv, `summary_report_${new Date().toISOString().split('T')[0]}.csv`);
+            
+        } catch (error) {
+            console.error('Error generating summary:', error);
+        }
+    }
+    
+    async function generateContaminationReport() {
+        try {
+            const response = await fetch('/api/detections/alerts/');
+            const alerts = await response.json();
+            const alertEvents = alerts.results || alerts;
+            
+            let csv = 'Timestamp,Material,Confidence,Alert Reason\n';
+            alertEvents.forEach(a => {
+                csv += `"${a.timestamp}","${a.detected_class}",${a.confidence_score},"${a.alert_reason || 'Contamination detected'}"\n`;
+            });
+            
+            downloadCSV(csv, `contamination_report_${new Date().toISOString().split('T')[0]}.csv`);
+            
+        } catch (error) {
+            console.error('Error generating contamination report:', error);
+        }
+    }
+    
+    function downloadReport() {
+        if (currentReportData) {
+            let csv = 'Timestamp,Material,Confidence,Alert,Worker Corrected,Corrected Class,Notes\n';
+            currentReportData.forEach(d => {
+                csv += `"${d.timestamp}","${d.detected_class}",${d.confidence_score},${d.alert_triggered},${d.worker_corrected},"${d.worker_corrected_class || ''}","${d.worker_notes || ''}"\n`;
+            });
+            downloadCSV(csv, `report_${document.getElementById('startDate').value}_to_${document.getElementById('endDate').value}.csv`);
+        }
+    }
+    
+    function downloadCSV(csv, filename) {
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+</script>
+{% endblock %}

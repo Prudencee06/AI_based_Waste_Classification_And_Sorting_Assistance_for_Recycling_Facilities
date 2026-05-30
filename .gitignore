@@ -1,0 +1,70 @@
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Django
+*.log
+db.sqlite3
+*.sqlite3
+core/db.sqlite3
+core/staticfiles/
+core/media/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Model files (large)
+*.keras
+*.h5
+*.pkl
+ml_model/models/
+
+# Models
+*.pt
+*.pth
+*.h5
+*.onnx
+
+datasets/
+train/
+valid/
+test/datasets/
+train/
+valid/
+test/
+
+# YOLO
+runs/
+
+# Dataset (large)
+ml_model/data/
+*.zip
+
+yolo_waste/garbage_classification/
+
+# Environment variables
+.env
+*.env
+
+__pycache__/
+*.pyc
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+test.py

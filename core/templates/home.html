@@ -1,0 +1,206 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Home - Waste Classification System{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 text-center mb-5">
+        <h1 class="display-4">
+            <i class="fas fa-recycle text-success"></i>
+            AI-Based Waste Classification System
+        </h1>
+        <p class="lead">Intelligent sorting assistance for recycling facilities</p>
+        <hr class="my-4">
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body text-center">
+                <i class="fas fa-camera fa-3x text-primary mb-3"></i>
+                <h5 class="card-title">Real-Time Detection</h5>
+                <p class="card-text">
+                    AI-powered camera system identifies waste types in real-time
+                    and alerts workers when contamination is detected.
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body text-center">
+                <i class="fas fa-bell fa-3x text-warning mb-3"></i>
+                <h5 class="card-title">Audio Alerts</h5>
+                <p class="card-text">
+                    Instant beep alerts when metal or other contaminants are detected
+                    in the waste stream, helping workers respond immediately.
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body text-center">
+                <i class="fas fa-database fa-3x text-info mb-3"></i>
+                <h5 class="card-title">Data Logging</h5>
+                <p class="card-text">
+                    All detections and alerts are stored for analysis, helping
+                    facilities track performance and identify trends.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-6 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="fas fa-chart-line"></i> Quick Stats</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6 mb-3">
+                        <h3 id="totalDetections" class="text-primary">0</h3>
+                        <p class="text-muted">Total Detections</p>
+                    </div>
+                    <div class="col-6 mb-3">
+                        <h3 id="totalAlerts" class="text-warning">0</h3>
+                        <p class="text-muted">Total Alerts</p>
+                    </div>
+                    <div class="col-6">
+                        <h3 id="todayDetections" class="text-success">0</h3>
+                        <p class="text-muted">Today's Detections</p>
+                    </div>
+                    <div class="col-6">
+                        <h3 id="todayAlerts" class="text-danger">0</h3>
+                        <p class="text-muted">Today's Alerts</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-play-circle"></i> Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{% url 'detections' %}" class="btn btn-primary">
+                        <i class="fas fa-eye"></i> View All Detections
+                    </a>
+                    <a href="{% url 'reports' %}" class="btn btn-success">
+                        <i class="fas fa-chart-bar"></i> Generate Report
+                    </a>
+                    <a href="/admin/detection/detectionevent/" class="btn btn-info">
+                        <i class="fas fa-database"></i> Manage in Admin
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0"><i class="fas fa-clock"></i> Recent Detections</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="recentDetectionsTable">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Material</th>
+                                <th>Confidence</th>
+                                <th>Alert</th>
+                                <th>Worker Corrected</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recentDetectionsBody">
+                            <tr>
+                                <td colspan="5" class="text-center">Loading detections...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Fetch dashboard stats
+    async function fetchStats() {
+        try {
+            const response = await fetch('/api/dashboard/');
+            const data = await response.json();
+            
+            // Update stats
+            document.getElementById('totalDetections').textContent = data.recent_events?.length || 0;
+            document.getElementById('totalAlerts').textContent = data.total_alerts_today || 0;
+            document.getElementById('todayDetections').textContent = data.total_detections_today || 0;
+            document.getElementById('todayAlerts').textContent = data.total_alerts_today || 0;
+            
+            // Update recent detections table
+            const tbody = document.getElementById('recentDetectionsBody');
+            if (data.recent_events && data.recent_events.length > 0) {
+                tbody.innerHTML = data.recent_events.slice(0, 10).map(event => `
+                    <tr>
+                        <td>${new Date(event.timestamp).toLocaleString()}</td>
+                        <td>
+                            <span class="badge ${getBadgeClass(event.detected_class)}">
+                                ${event.detected_class}
+                            </span>
+                        </td>
+                        <td>${(event.confidence_score * 100).toFixed(1)}%</td>
+                        <td>
+                            ${event.alert_triggered ? 
+                                '<span class="badge bg-danger"><i class="fas fa-bell"></i> Alert</span>' : 
+                                '<span class="badge bg-secondary">No Alert</span>'}
+                        </td>
+                        <td>
+                            ${event.worker_corrected ? 
+                                '<span class="badge bg-success">Corrected</span>' : 
+                                '<span class="badge bg-secondary">-</span>'}
+                        </td>
+                    </tr>
+                `).join('');
+            } else {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">No detections yet</td></tr>';
+            }
+        } catch (error) {
+            console.error('Error fetching stats:', error);
+        }
+    }
+    
+    function getBadgeClass(category) {
+        const classes = {
+            'plastic': 'bg-primary',
+            'metal': 'bg-danger',
+            'paper': 'bg-success',
+            'glass': 'bg-info',
+            'cardboard': 'bg-warning',
+            'organic': 'bg-secondary',
+            'trash': 'bg-dark'
+        };
+        return classes[category] || 'bg-secondary';
+    }
+    
+    // Load stats on page load
+    fetchStats();
+    
+    // Refresh every 30 seconds
+    setInterval(fetchStats, 30000);
+</script>
+{% endblock %}

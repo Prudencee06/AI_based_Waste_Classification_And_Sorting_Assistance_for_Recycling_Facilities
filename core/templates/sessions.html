@@ -1,0 +1,222 @@
+{% extends 'base.html' %}
+
+{% block title %}Sorting Sessions - Waste Classification System{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2><i class="fas fa-clock"></i> Sorting Sessions</h2>
+        <hr>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-6">
+        <button class="btn btn-success" onclick="startNewSession()">
+            <i class="fas fa-play"></i> Start New Session
+        </button>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-info text-white">
+        <h5 class="mb-0">Active Sessions</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Operator</th>
+                        <th>Shift</th>
+                        <th>Start Time</th>
+                        <th>Detections</th>
+                        <th>Alerts</th>
+                        <th>Avg Confidence</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="activeSessionsBody">
+                    <tr><td colspan="8" class="text-center">No active sessions</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm mt-4">
+    <div class="card-header bg-secondary text-white">
+        <h5 class="mb-0">Completed Sessions</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover" id="completedSessionsTable">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Operator</th>
+                        <th>Shift</th>
+                        <th>Start Time</th>
+                        <th>End Time</th>
+                        <th>Duration</th>
+                        <th>Detections</th>
+                        <th>Alerts</th>
+                        <th>Interventions</th>
+                        <th>Avg Confidence</th>
+                    </tr>
+                </thead>
+                <tbody id="completedSessionsBody">
+                    <tr><td colspan="10" class="text-center">Loading sessions...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- New Session Modal -->
+<div class="modal fade" id="newSessionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Start New Sorting Session</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Operator Name</label>
+                    <input type="text" class="form-control" id="operatorName" placeholder="Enter operator name">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Shift</label>
+                    <select class="form-select" id="shiftSelect">
+                        <option value="morning">Morning (6:00 - 14:00)</option>
+                        <option value="afternoon">Afternoon (14:00 - 22:00)</option>
+                        <option value="night">Night (22:00 - 6:00)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="createSession()">Start Session</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function loadSessions() {
+        try {
+            // Load active sessions
+            const activeResponse = await fetch('/api/sessions/active/');
+            const activeSessions = await activeResponse.json();
+            updateActiveSessions(activeSessions);
+            
+            // Load all sessions (completed)
+            const allResponse = await fetch('/api/sessions/');
+            const allSessions = await allResponse.json();
+            const completedSessions = (allSessions.results || allSessions).filter(s => s.end_time);
+            updateCompletedSessions(completedSessions);
+            
+        } catch (error) {
+            console.error('Error loading sessions:', error);
+        }
+    }
+    
+    function updateActiveSessions(sessions) {
+        const tbody = document.getElementById('activeSessionsBody');
+        if (sessions && sessions.length > 0) {
+            tbody.innerHTML = sessions.map(s => `
+                <tr>
+                    <td>${s.id}</td>
+                    <td>${s.operator_name || 'Unknown'}</td>
+                    <td>${s.shift || 'Not set'}</td>
+                    <td>${new Date(s.start_time).toLocaleString()}</td>
+                    <td>${s.total_detections}</td>
+                    <td>${s.total_alerts}</td>
+                    <td>${(s.average_confidence * 100).toFixed(1)}%</td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" onclick="endSession(${s.id})">
+                            <i class="fas fa-stop"></i> End
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center">No active sessions</td></tr>';
+        }
+    }
+    
+    function updateCompletedSessions(sessions) {
+        const tbody = document.getElementById('completedSessionsBody');
+        if (sessions && sessions.length > 0) {
+            tbody.innerHTML = sessions.map(s => {
+                const duration = s.end_time ? 
+                    Math.round((new Date(s.end_time) - new Date(s.start_time)) / 1000 / 60) : 0;
+                return `
+                    <tr>
+                        <td>${s.id}</td>
+                        <td>${s.operator_name || 'Unknown'}</td>
+                        <td>${s.shift || 'Not set'}</td>
+                        <td>${new Date(s.start_time).toLocaleString()}</td>
+                        <td>${s.end_time ? new Date(s.end_time).toLocaleString() : '-'}</td>
+                        <td>${duration} min</td>
+                        <td>${s.total_detections}</td>
+                        <td>${s.total_alerts}</td>
+                        <td>${s.worker_interventions}</td>
+                        <td>${(s.average_confidence * 100).toFixed(1)}%</td>
+                    </tr>
+                `;
+            }).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center">No completed sessions</td></tr>';
+        }
+    }
+    
+    function startNewSession() {
+        new bootstrap.Modal(document.getElementById('newSessionModal')).show();
+    }
+    
+    async function createSession() {
+        const operatorName = document.getElementById('operatorName').value;
+        const shift = document.getElementById('shiftSelect').value;
+        
+        try {
+            const response = await fetch('/api/sessions/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    operator_name: operatorName,
+                    shift: shift
+                })
+            });
+            
+            if (response.ok) {
+                bootstrap.Modal.getInstance(document.getElementById('newSessionModal')).hide();
+                loadSessions();
+            }
+        } catch (error) {
+            console.error('Error creating session:', error);
+        }
+    }
+    
+    async function endSession(sessionId) {
+        if (confirm('End this sorting session?')) {
+            try {
+                await fetch(`/api/sessions/${sessionId}/end/`, { method: 'POST' });
+                loadSessions();
+            } catch (error) {
+                console.error('Error ending session:', error);
+            }
+        }
+    }
+    
+    // Load sessions on page load
+    loadSessions();
+    
+    // Refresh every 30 seconds
+    setInterval(loadSessions, 30000);
+</script>
+{% endblock %}

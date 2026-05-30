@@ -1,0 +1,217 @@
+{% extends 'base.html' %}
+
+{% block title %}Detections - Waste Classification System{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2><i class="fas fa-eye"></i> Waste Detections</h2>
+        <hr>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-6">
+        <div class="btn-group">
+            <button class="btn btn-outline-primary active" onclick="loadDetections('all')">All</button>
+            <button class="btn btn-outline-danger" onclick="loadDetections('alerts')">Alerts Only</button>
+            <button class="btn btn-outline-success" onclick="loadDetections('corrected')">Corrected</button>
+        </div>
+    </div>
+    <div class="col-md-6 text-end">
+        <button class="btn btn-success" onclick="exportData()">
+            <i class="fas fa-download"></i> Export CSV
+        </button>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover" id="detectionsTable">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Material</th>
+                        <th>Confidence</th>
+                        <th>Alert</th>
+                        <th>Worker Corrected</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="detectionsBody">
+                    <tr><td colspan="6" class="text-center">Loading detections...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Correction Modal -->
+<div class="modal fade" id="correctionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Correct Detection</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="correctionId">
+                <div class="mb-3">
+                    <label class="form-label">Correct Classification</label>
+                    <select class="form-select" id="correctedClass">
+                        <option value="plastic">Plastic</option>
+                        <option value="metal">Metal</option>
+                        <option value="paper">Paper</option>
+                        <option value="glass">Glass</option>
+                        <option value="cardboard">Cardboard</option>
+                        <option value="organic">Organic</option>
+                        <option value="trash">Trash</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Notes</label>
+                    <textarea class="form-control" id="correctionNotes" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitCorrection()">Save Correction</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentFilter = 'all';
+    let allDetections = [];
+    
+    async function loadDetections(filter = 'all') {
+        currentFilter = filter;
+        
+        try {
+            let url = '/api/detections/';
+            if (filter === 'alerts') {
+                url = '/api/detections/alerts/';
+            }
+            
+            const response = await fetch(url);
+            const data = await response.json();
+            allDetections = data.results || data;
+            
+            renderTable();
+        } catch (error) {
+            console.error('Error loading detections:', error);
+        }
+    }
+    
+    function renderTable() {
+        const tbody = document.getElementById('detectionsBody');
+        let detections = allDetections;
+        
+        if (currentFilter === 'corrected') {
+            detections = detections.filter(d => d.worker_corrected);
+        }
+        
+        if (detections.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center">No detections found</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = detections.map(d => `
+            <tr>
+                <td>${new Date(d.timestamp).toLocaleString()}</td>
+                <td>
+                    <span class="badge ${getBadgeClass(d.detected_class)}">
+                        ${d.detected_class}
+                        ${d.worker_corrected_class ? 
+                            `<i class="fas fa-arrow-right"></i> ${d.worker_corrected_class}` : ''}
+                    </span>
+                </td>
+                <td>${(d.confidence_score * 100).toFixed(1)}%</td>
+                <td>
+                    ${d.alert_triggered ? 
+                        '<span class="badge bg-danger"><i class="fas fa-bell"></i> Alert</span>' : 
+                        '<span class="badge bg-secondary">No Alert</span>'}
+                </td>
+                <td>
+                    ${d.worker_corrected ? 
+                        '<span class="badge bg-success">Yes</span>' : 
+                        '<span class="badge bg-secondary">No</span>'}
+                </td>
+                <td>
+                    ${!d.worker_corrected ? 
+                        `<button class="btn btn-sm btn-warning" onclick="openCorrectionModal(${d.id}, '${d.detected_class}')">
+                            <i class="fas fa-edit"></i> Correct
+                        </button>` : 
+                        '<span class="text-muted">Corrected</span>'}
+                </td>
+            </tr>
+        `).join('');
+    }
+    
+    function getBadgeClass(category) {
+        const classes = {
+            'plastic': 'bg-primary',
+            'metal': 'bg-danger',
+            'paper': 'bg-success',
+            'glass': 'bg-info',
+            'cardboard': 'bg-warning',
+            'organic': 'bg-secondary',
+            'trash': 'bg-dark'
+        };
+        return classes[category] || 'bg-secondary';
+    }
+    
+    function openCorrectionModal(id, currentClass) {
+        document.getElementById('correctionId').value = id;
+        document.getElementById('correctedClass').value = currentClass;
+        document.getElementById('correctionNotes').value = '';
+        new bootstrap.Modal(document.getElementById('correctionModal')).show();
+    }
+    
+    async function submitCorrection() {
+        const id = document.getElementById('correctionId').value;
+        const correctedClass = document.getElementById('correctedClass').value;
+        const notes = document.getElementById('correctionNotes').value;
+        
+        try {
+            const response = await fetch(`/api/detections/${id}/correct/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    corrected_class: correctedClass,
+                    notes: notes
+                })
+            });
+            
+            if (response.ok) {
+                bootstrap.Modal.getInstance(document.getElementById('correctionModal')).hide();
+                loadDetections(currentFilter);
+            }
+        } catch (error) {
+            console.error('Error submitting correction:', error);
+        }
+    }
+    
+    function exportData() {
+        let csv = 'Timestamp,Material,Confidence,Alert,Worker Corrected,Corrected Class,Notes\n';
+        allDetections.forEach(d => {
+            csv += `"${d.timestamp}","${d.detected_class}",${d.confidence_score},${d.alert_triggered},${d.worker_corrected},"${d.worker_corrected_class || ''}","${d.worker_notes || ''}"\n`;
+        });
+        
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `detections_${new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+    
+    // Load detections on page load
+    loadDetections();
+</script>
+{% endblock %}

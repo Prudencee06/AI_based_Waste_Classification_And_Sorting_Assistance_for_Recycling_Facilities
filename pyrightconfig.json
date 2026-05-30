@@ -1,0 +1,21 @@
+{
+    "pythonPath": "venv/Scripts/python.exe",
+    "venvPath": ".",
+    "venv": "venv",
+    "reportMissingImports": false,
+    "reportMissingModuleSource": false,
+    "reportGeneralTypeIssues": false,
+    "exclude": [
+        "**/node_modules",
+        "**/__pycache__",
+        "**/venv",
+        "**/.*",
+        "**/.*/**",
+        "**/migrations",
+        "**/static",
+        "**/media"
+    ],
+    "extraPaths": [
+        "venv/Lib/site-packages"
+    ]
+}
